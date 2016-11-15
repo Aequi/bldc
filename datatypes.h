@@ -213,7 +213,8 @@ typedef enum {
 	APP_ADC_UART,
 	APP_NUNCHUK,
 	APP_NRF,
-	APP_CUSTOM
+	APP_CUSTOM,
+	APP_EUC
 } app_use;
 
 // PPM control types

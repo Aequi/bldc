@@ -76,6 +76,10 @@ void app_init(app_configuration *conf) {
 #endif
 		break;
 
+	case APP_EUC:
+		app_euc_start();
+		break;
+
 	default:
 		break;
 	}
