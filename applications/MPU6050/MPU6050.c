@@ -1,91 +1,330 @@
-//MPU6050 I2C library for ARM STM32F103xx Microcontrollers - Main source file
-//Has bit, byte and buffer I2C R/W functions
-// 23/05/2012 by Harinadha Reddy Chintalapalli <harinath.ec@gmail.com>
-// Changelog:
-//     2012-05-23 - initial release. Thanks to Jeff Rowberg <jeff@rowberg.net> for his AVR/Arduino
-//                  based MPU6050 development which inspired me & taken as reference to develop this.
 /* ============================================================================================
- MPU6050 device I2C library code for ARM STM32F103xx is placed under the MIT license
- Copyright (c) 2012 Harinadha Reddy Chintalapalli
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in
- all copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ================================================================================================
- */
+* MPU6050_Config.h
+* Author:   Anh Vo Tuan
+* Email:  votuananhs@gmailc.om
+* Brief:  The file is used to define parameters which use in the MPU6050 driver.
+*       It will be compatible with ChibiOS.
+*   ------------------------------------------------------------------------------
+*  Permission is hereby granted, free of charge, to any person obtaining a copy
+*  of this software and associated documentation files (the "Software"), to deal
+*  in the Software without restriction, including without limitation the rights
+*  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+*  copies of the Software, and to permit persons to whom the Software is
+*  furnished to do so, subject to the following conditions:
+* 
+*  The above copyright notice and this permission notice shall be included in
+*  all copies or substantial portions of the Software.
+* 
+*  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+*  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+*  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+*  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+*  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+*  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+*  THE SOFTWARE.
+*  ============================================================================================
+*/
 
 /* Includes */
+#include "ch.h"
+#include "hal.h"
+#include "string.h"
+#include "stdlib.h"
+#include "stm32f4xx_conf.h"
 #include "MPU6050.h"
-#include "stm32f10x_i2c.h"
-#include "main.h"
-#include "tinystdio/tinystdio.h"
+#include "MPU6050_Config.h"
+
+
+
+/*=========================== DEFINE TYPE =======================================================*/
+/*
+ * 500KBaud, automatic wakeup, automatic recover
+ * from abort mode.
+ * See section 22.7.7 on the STM32 reference manual.
+ */
+static const I2CConfig i2cfg = {
+    OPMODE_SMBUS_HOST,
+    MPU6050_CLOCK_SPEED_I2C,
+    STD_DUTY_CYCLE
+};
+
+/*=========================== DEFINE GLOBAL VARIABLE ============================================*/
+static volatile uint8_t mpu6050_i2c_running = FALSE;
+extern I2CDriver MPU6050_HW_I2C_DEV;
+
+/*=========================== DEFINE PROTOTYPE FUNCTION =========================================*/
+static void MPU6050_HwStartI2c(void);
+static void MPU6050_HwStopI2c(void);
+static void MPU6050_HwTryRestoreI2c(void);
+
+static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes);
+static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes);
+
+static uint8_t MPU6050_Write(uint8_t slaveAddr, uint8_t regAddr, uint8_t data);
+static uint8_t MPU6050_Read(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data);
+
+static uint8_t MPU6050_WriteMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t data, uint8_t mask, uint8_t offset);
+static uint8_t MPU6050_ReadMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t mask, uint8_t offset);
+
+
+
+/*=========================== FUNCTION ==========================================================*/
+static void MPU6050_HwStartI2c(void) {
+  i2cAcquireBus(&MPU6050_HW_I2C_DEV);
+
+  if (!mpu6050_i2c_running) {
+    palSetPadMode(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN,
+        PAL_MODE_ALTERNATE(MPU6050_HW_I2C_GPIO_AF) |
+        PAL_STM32_OTYPE_OPENDRAIN |
+        PAL_STM32_OSPEED_MID1 |
+        PAL_STM32_PUDR_PULLUP);
+    palSetPadMode(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN,
+        PAL_MODE_ALTERNATE(MPU6050_HW_I2C_GPIO_AF) |
+        PAL_STM32_OTYPE_OPENDRAIN |
+        PAL_STM32_OSPEED_MID1 |
+        PAL_STM32_PUDR_PULLUP);
+
+    i2cStart(&MPU6050_HW_I2C_DEV, &i2cfg);
+    mpu6050_i2c_running = TRUE;
+  }
+
+  i2cReleaseBus(&MPU6050_HW_I2C_DEV);
+}
+
+static void MPU6050_HwStopI2c(void) {
+  i2cAcquireBus(&MPU6050_HW_I2C_DEV);
+
+  if (mpu6050_i2c_running) {
+    palSetPadMode(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN, PAL_MODE_INPUT);
+    palSetPadMode(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN, PAL_MODE_INPUT);
+
+    i2cStop(&MPU6050_HW_I2C_DEV);
+    mpu6050_i2c_running = FALSE;
+
+  }
+
+  i2cReleaseBus(&MPU6050_HW_I2C_DEV);
+}
+
+
+/**
+ * Try to restore the i2c bus
+ */
+static void MPU6050_HwTryRestoreI2c(void) {
+  if (mpu6050_i2c_running) {
+    i2cAcquireBus(&MPU6050_HW_I2C_DEV);
+
+    palSetPadMode(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN,
+        PAL_STM32_OTYPE_OPENDRAIN |
+        PAL_STM32_OSPEED_MID1 |
+        PAL_STM32_PUDR_PULLUP);
+
+    palSetPadMode(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN,
+        PAL_STM32_OTYPE_OPENDRAIN |
+        PAL_STM32_OSPEED_MID1 |
+        PAL_STM32_PUDR_PULLUP);
+
+    palSetPad(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN);
+    palSetPad(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN);
+
+    chThdSleep(1);
+
+    for(int i = 0;i < 16;i++) {
+      palClearPad(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN);
+      chThdSleep(1);
+      palSetPad(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN);
+      chThdSleep(1);
+    }
+
+    // Generate start then stop condition
+    palClearPad(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN);
+    chThdSleep(1);
+    palClearPad(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN);
+    chThdSleep(1);
+    palSetPad(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN);
+    chThdSleep(1);
+    palSetPad(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN);
+
+    palSetPadMode(MPU6050_HW_I2C_SCL_PORT, MPU6050_HW_I2C_SCL_PIN,
+        PAL_MODE_ALTERNATE(MPU6050_HW_I2C_GPIO_AF) |
+        PAL_STM32_OTYPE_OPENDRAIN |
+        PAL_STM32_OSPEED_MID1 |
+        PAL_STM32_PUDR_PULLUP);
+
+    palSetPadMode(MPU6050_HW_I2C_SDA_PORT, MPU6050_HW_I2C_SDA_PIN,
+        PAL_MODE_ALTERNATE(MPU6050_HW_I2C_GPIO_AF) |
+        PAL_STM32_OTYPE_OPENDRAIN |
+        PAL_STM32_OSPEED_MID1 |
+        PAL_STM32_PUDR_PULLUP);
+
+    MPU6050_HW_I2C_DEV.state = I2C_STOP;
+    i2cStart(&MPU6050_HW_I2C_DEV, &i2cfg);
+
+    i2cReleaseBus(&MPU6050_HW_I2C_DEV);
+  }
+}
+
+
+
+static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
+{
+  uint8_t rxbuf[1];
+  uint8_t *txbuf = NULL;
+  systime_t tmo = MS2ST(5);
+  msg_t status = MSG_OK;
+  uint8_t temp_result = TRUE;
+
+  txbuf = (uint8_t*)calloc((number_bytes + 1), sizeof(uint8_t));
+  txbuf[0] = regAddr;
+  memcpy(&txbuf[1], data, number_bytes);
+
+  i2cAcquireBus(&MPU6050_HW_I2C_DEV);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, &txbuf[0], 1, rxbuf, 0, tmo);
+  i2cReleaseBus(&MPU6050_HW_I2C_DEV);
+
+  free(txbuf);
+
+  if((MSG_RESET == status)||(MSG_TIMEOUT == status))
+  {
+    temp_result = FALSE;
+  }
+
+  return temp_result;
+}
+
+
+static uint8_t MPU6050_Write(uint8_t slaveAddr, uint8_t regAddr, uint8_t data)
+{
+  return MPU6050_Writes(slaveAddr, regAddr, &data, 1);
+}
+
+
+static uint8_t MPU6050_WriteMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t data, uint8_t mask, uint8_t offset)
+{
+  uint8_t temp_data = 0;
+  uint8_t temp_result = FALSE;
+
+  temp_result = MPU6050_Reads(slaveAddr, regAddr, &temp_data, 1);
+  if(TRUE == temp_result)
+  {
+    temp_data = (temp_data & (!mask)) | (data << offset);
+    temp_result = MPU6050_Writes(slaveAddr, regAddr, &temp_data, 1);
+  }
+  return temp_result;
+}
+
+
+static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
+{
+  uint8_t *rxbuf = data;
+  uint8_t txbuf[2] = {0, 0};
+  systime_t tmo = MS2ST(5);
+  msg_t status = MSG_OK;
+  uint8_t temp_result = TRUE;
+
+  txbuf[0] = regAddr;
+  txbuf[1] = (slaveAddr << 1) | 0x01;
+
+  i2cAcquireBus(&MPU6050_HW_I2C_DEV);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, 2, rxbuf, number_bytes, tmo);
+  i2cReleaseBus(&MPU6050_HW_I2C_DEV);
+
+  if((MSG_RESET == status)||(MSG_TIMEOUT == status))
+  {
+    temp_result = FALSE;
+  }
+
+  return temp_result;
+}
+
+static uint8_t MPU6050_Read(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data)
+{
+  return MPU6050_Reads(slaveAddr, regAddr, data, 1);
+}
+
+
+static uint8_t MPU6050_ReadMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t mask, uint8_t offset)
+{
+  uint8_t temp_data = 0;
+  uint8_t temp_result = FALSE;
+
+  temp_result = MPU6050_Reads(slaveAddr, regAddr, &temp_data, 1);
+  if(TRUE == temp_result)
+  {
+    temp_data = (temp_data & mask) >> offset;
+  }
+  *data = temp_data;
+  return temp_result;
+}
 
 /** @defgroup MPU6050_Library
  * @{
  */
 
-void MPU6050_Initialize(void) 
+void MPU6050_Init(void) 
 {
-   //reset the whole module first
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, 1<<7);
+  /* 1. Initialize I2C peripheral in STM32f4 first */
+  MPU6050_HwStartI2c();
 
-   delay_ms(50); //wait for 50ms for the gyro to stable
+  /* 2. Initialize MPU6050 */
+  //reset the whole module first
+  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, MPU6050_PWR_1_RESET_SET, MPU6050_PWR_1_RESET_MASK, MPU6050_PWR_1_RESET_OFFSET);
 
-   //PLL with Z axis gyroscope reference
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_CLOCK_PLL_ZGYRO);
+  chThdSleepMilliseconds(50); //wait for 50ms for the gyro to stable
+
+  //PLL with Z axis gyroscope reference
+  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, MPU6050_PWR_1_CLKSEL_PLL_ZGYRO, MPU6050_PWR_1_CLKSEL_MASK, MPU6050_PWR_1_CLKSEL_OFFSET);
 	
-   //DLPF_CFG = 1: Fs=1khz; bandwidth=42hz	
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_CONFIG, 0x01);
+  //DLPF_CFG = 3: Fs=1khz; bandwidth=42hz	
+  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_CONFIG_ADDR, MPU6050_CONFIG_DLPF_CFG_3, MPU6050_CONFIG_DLPF_CFG_MASK, MPU6050_CONFIG_DLPF_CFG_OFFSET);
     	
-   //500Hz sample rate ~ 2ms
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_SMPLRT_DIV, 0x01);
+  //500Hz sample rate ~ 2ms
+  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_SMPLRT_DIV_ADDR, 0x01);
 
-   //Gyro full scale setting
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GYRO_FS_2000);
+  //Gyro full scale setting
+  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_GYRO_CONFIG_ADDR, MPU6050_GCONFIG_FS_SEL_2000, MPU6050_GCONFIG_FS_SEL_MASK, MPU6050_GCONFIG_FS_SEL_OFFSET);
    
-   //Accel full scale setting
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACCEL_FS_16);
+  //Accel full scale setting
+  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_CONFIG_ADDR, MPU6050_ACONFIG_AFS_SEL_16g, MPU6050_ACONFIG_AFS_SEL_MASK, MPU6050_ACONFIG_AFS_SEL_OFFSET);
 
-   //reset gyro and accel sensor
-   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_SIGNAL_PATH_RESET, 0x07);
+  //reset gyro and accel sensor
+  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_SIGNAL_PATH_RESET_ADDR, 0x07);
+}
+
+
+/*
+*
+*/
+void MPU6050_DeInit(void)
+{
+    /* 1. MPU6050 */
+
+    /* 2. I2C of STM32F4xx */
+  MPU6050_HwStopI2c();
 }
 
 /** Verify the I2C connection.
  * Make sure the device is connected and responds as expected.
  * @return True if connection is valid, FALSE otherwise
  */
-BOOL MPU6050_TestConnection()
+uint8_t MPU6050_TestConnection(void)
 {
-    return MPU6050_GetDeviceID() == 0x34 ? TRUE : FALSE; //0b110100; 8-bit representation in hex = 0x34
+  return MPU6050_GetDeviceID() == 0x34 ? TRUE : FALSE; //0b110100; 8-bit representation in hex = 0x34
 }
 // WHO_AM_I register
 
 /** Get Device ID.
  * This register is used to verify the identity of the device (0b110100).
- * @return Device ID (should be 0x68, 104 dec, 150 oct)
- * @see MPU6050_RA_WHO_AM_I
- * @see MPU6050_WHO_AM_I_BIT
- * @see MPU6050_WHO_AM_I_LENGTH
+ * @return Device ID (should be 0x34, 52 dec, 64 oct)
+ * @see MPU6050_WHO_AM_I_ADDR
+ * @see MPU6050_WHO_AM_I_MASK
+ * @see MPU6050_WHO_AM_I_OFFSET
  */
-uint8_t MPU6050_GetDeviceID()
+uint8_t MPU6050_GetDeviceID(void)
 {
-    uint8_t tmp;
-    MPU6050_ReadBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_WHO_AM_I, MPU6050_WHO_AM_I_BIT, MPU6050_WHO_AM_I_LENGTH, &tmp);
-    return tmp;
+  uint8_t tmp;
+  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_WHO_AM_I_ADDR, &tmp, MPU6050_WHO_AM_I_MASK, MPU6050_WHO_AM_I_OFFSET);
+  return tmp;
 }
 
 // GYRO_CONFIG register
@@ -103,15 +342,15 @@ uint8_t MPU6050_GetDeviceID()
  *
  * @return Current full-scale gyroscope range setting
  * @see MPU6050_GYRO_FS_250
- * @see MPU6050_RA_GYRO_CONFIG
- * @see MPU6050_GCONFIG_FS_SEL_BIT
+ * @see MPU6050_GYRO_CONFIG_ADDR
+ * @see MPU6050_GCONFIG_FS_SEL_MASK
  * @see MPU6050_GCONFIG_FS_SEL_LENGTH
  */
-uint8_t MPU6050_GetFullScaleGyroRange()
+uint8_t MPU6050_GetFullScaleGyroRange(void)
 {
-    uint8_t tmp;
-    MPU6050_ReadBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, &tmp);
-    return tmp;
+  uint8_t tmp;
+  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_GYRO_CONFIG_ADDR, &tmp, MPU6050_GCONFIG_FS_SEL_MASK, MPU6050_GCONFIG_FS_SEL_OFFSET);
+  return tmp;
 }
 
 /** Get full-scale accelerometer range.
@@ -127,15 +366,15 @@ uint8_t MPU6050_GetFullScaleGyroRange()
  *
  * @return Current full-scale accelerometer range setting
  * @see MPU6050_ACCEL_FS_2
- * @see MPU6050_RA_ACCEL_CONFIG
- * @see MPU6050_ACONFIG_AFS_SEL_BIT
- * @see MPU6050_ACONFIG_AFS_SEL_LENGTH
+ * @see MPU6050_ACCEL_CONFIG_ADDR
+ * @see MPU6050_ACONFIG_AFS_SEL_MASK
+ * @see MPU6050_ACONFIG_AFS_SEL_OFFSET
  */
-uint8_t MPU6050_GetFullScaleAccelRange()
+uint8_t MPU6050_GetFullScaleAccelRange(void)
 {
-    uint8_t tmp;
-    MPU6050_ReadBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_AFS_SEL_BIT, MPU6050_ACONFIG_AFS_SEL_LENGTH, &tmp);
-    return tmp;
+  uint8_t tmp;
+  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_CONFIG_ADDR, &tmp, MPU6050_ACONFIG_AFS_SEL_MASK, MPU6050_ACONFIG_AFS_SEL_OFFSET);
+  return tmp;
 }
 
 /** Get sleep mode status.
@@ -149,11 +388,11 @@ uint8_t MPU6050_GetFullScaleAccelRange()
  * @see MPU6050_RA_PWR_MGMT_1
  * @see MPU6050_PWR1_SLEEP_BIT
  */
-BOOL MPU6050_GetSleepModeStatus()
+uint8_t MPU6050_GetSleepModeStatus(void)
 {
-    uint8_t tmp;
-    MPU6050_ReadBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_SLEEP_BIT, &tmp);
-    return tmp == 0x00 ? FALSE : TRUE;
+  uint8_t tmp;
+  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, &tmp, MPU6050_PWR_1_SLEEP_MASK, MPU6050_PWR_1_SLEEP_OFFSET);
+  return tmp == 0x00 ? FALSE : TRUE;
 }
 
 
@@ -162,265 +401,29 @@ BOOL MPU6050_GetSleepModeStatus()
  * @param AccelGyro 16-bit signed integer array of length 6
  * @see MPU6050_RA_ACCEL_XOUT_H
  */
-void MPU6050_GetRawAccelGyro(s16* AccelGyro)
+void MPU6050_GetRawAccelGyro(uint16_t *AccelGyro)
 {
-    u8 tmpBuffer[14];
-    int i;
-    MPU6050_I2C_BufferRead(MPU6050_DEFAULT_ADDRESS, tmpBuffer, MPU6050_RA_ACCEL_XOUT_H, 14);
-
-    /* Get acceleration */
-    for (i = 0; i < 3; i++)
-        AccelGyro[i] = ((s16) ((u16) tmpBuffer[2 * i] << 8) + tmpBuffer[2 * i + 1]);
-    /* Get Angular rate */
-    for (i = 4; i < 7; i++)
-        AccelGyro[i - 1] = ((s16) ((u16) tmpBuffer[2 * i] << 8) + tmpBuffer[2 * i + 1]);
-}
-
-void MPU6050_Write(uint8_t slaveAddr, uint8_t regAddr, uint8_t data) 
-{
-    uint8_t tmp;  
-    tmp = data;
-    MPU6050_I2C_ByteWrite(slaveAddr,&tmp,regAddr);   
-}
-
-//------------------------------------------------------------------
-void MPU6050_I2C_ByteWrite(u8 slaveAddr, u8* pBuffer, u8 writeAddr)
-{
-  /* While the bus is busy */
-  while (I2C_GetFlagStatus(MPU6050_I2C, I2C_FLAG_BUSY));
-
-  /* Send START condition */
-  I2C_GenerateSTART(MPU6050_I2C, ENABLE);
-
-  /* Test on EV5 and clear it */
-  while(!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_MODE_SELECT));
-
-  /* Send MPU6050 address for write */
-  I2C_Send7bitAddress(MPU6050_I2C, slaveAddr, I2C_Direction_Transmitter);
-
-  /* Test on EV6 and clear it */
-  while(!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
-
-  /* Send the MPU6050's internal address to write to */
-  I2C_SendData(MPU6050_I2C, writeAddr);
-
-  /* Test on EV8 and clear it */
-  while(!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_BYTE_TRANSMITTING));
-
-  /* Send the byte to be written */
-  if (pBuffer!=0) I2C_SendData(MPU6050_I2C, *pBuffer);
-
-  /* Test on EV8_2 and clear it */
-  while(!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
-
-  /* Send STOP condition */
-  I2C_GenerateSTOP(MPU6050_I2C, ENABLE);
-}
-
-/** Write multiple bits in an 8-bit device register.
- * @param slaveAddr I2C slave device address
- * @param regAddr Register regAddr to write to
- * @param bitStart First bit position to write (0-7)
- * @param length Number of bits to write (not more than 8)
- * @param data Right-aligned value to write
- */
-void MPU6050_WriteBits(uint8_t slaveAddr, uint8_t regAddr, uint8_t bitStart, uint8_t length, uint8_t data)
-{
-    //      010 value to write
-    // 76543210 bit numbers
-    //    xxx   args: bitStart=4, length=3
-    // 00011100 mask byte
-    // 10101111 original value (sample)
-    // 10100011 original & ~mask
-    // 10101011 masked | value
-    uint8_t tmp;
-    MPU6050_I2C_BufferRead(slaveAddr, &tmp, regAddr, 1);
-    uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
-    data <<= (bitStart - length + 1); // shift data into correct position
-    data &= mask; // zero all non-important bits in data
-    tmp &= ~(mask); // zero all important bits in existing byte
-    tmp |= data; // combine data with existing byte
-    MPU6050_I2C_ByteWrite(slaveAddr, &tmp, regAddr);
-}
-
-/** write a single bit in an 8-bit device register.
- * @param slaveAddr I2C slave device address
- * @param regAddr Register regAddr to write to
- * @param bitNum Bit position to write (0-7)
- * @param value New bit value to write
- */
-void MPU6050_WriteBit(uint8_t slaveAddr, uint8_t regAddr, uint8_t bitNum, uint8_t data)
-{
-    uint8_t tmp;
-    MPU6050_I2C_BufferRead(slaveAddr, &tmp, regAddr, 1);
-    tmp = (data != 0) ? (tmp | (1 << bitNum)) : (tmp & ~(1 << bitNum));
-    MPU6050_I2C_ByteWrite(slaveAddr, &tmp, regAddr);
-}
-
-/** Read multiple bits from an 8-bit device register.
- * @param slaveAddr I2C slave device address
- * @param regAddr Register regAddr to read from
- * @param bitStart First bit position to read (0-7)
- * @param length Number of bits to read (not more than 8)
- * @param data Container for right-aligned value (i.e. '101' read from any bitStart position will equal 0x05)
- * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default class value in readTimeout)
- */
-void MPU6050_ReadBits(uint8_t slaveAddr, uint8_t regAddr, uint8_t bitStart, uint8_t length, uint8_t *data)
-{
-    // 01101001 read byte
-    // 76543210 bit numbers
-    //    xxx   args: bitStart=4, length=3
-    //    010   masked
-    //   -> 010 shifted
-    uint8_t tmp;
-    MPU6050_I2C_BufferRead(slaveAddr, &tmp, regAddr, 1);
-    uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
-    tmp &= mask;
-    tmp >>= (bitStart - length + 1);
-    *data = tmp;
-}
-
-/** Read a single bit from an 8-bit device register.
- * @param slaveAddr I2C slave device address
- * @param regAddr Register regAddr to read from
- * @param bitNum Bit position to read (0-7)
- * @param data Container for single bit value
- * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default class value in readTimeout)
- */
-void MPU6050_ReadBit(uint8_t slaveAddr, uint8_t regAddr, uint8_t bitNum, uint8_t *data)
-{
-    uint8_t tmp;
-    MPU6050_I2C_BufferRead(slaveAddr, &tmp, regAddr, 1);
-    *data = tmp & (1 << bitNum);
-}
-
-/**
- * @brief  Initializes the I2C peripheral used to drive the MPU6050
- * @param  None
- * @return None
- */
-void MPU6050_I2C_Init()
-{
-  I2C_InitTypeDef I2C_InitStructure;
-  GPIO_InitTypeDef GPIO_InitStructure;
-
-  /* Enable GPIO clocks */
-  RCC_APB2PeriphClockCmd(MPU6050_I2C_RCC_Port, ENABLE);
-
-  /* Configure I2C pins: SCL and SDA */
-  GPIO_InitStructure.GPIO_Pin = MPU6050_I2C_SCL_Pin | MPU6050_I2C_SDA_Pin;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
-  GPIO_Init(MPU6050_I2C_Port, &GPIO_InitStructure);
-
-  /* Enable I2C clocks */
-  RCC_APB1PeriphClockCmd(MPU6050_I2C_RCC_Periph, ENABLE);
-
-  I2C_DeInit(MPU6050_I2C);
-
-  /* Reset I2C1 IP */
-  RCC_APB1PeriphResetCmd(MPU6050_I2C_RCC_Periph, ENABLE);
-  chThdSleepMilliseconds (100);
-  /* Release reset signal of I2C1 IP */
-  RCC_APB1PeriphResetCmd(MPU6050_I2C_RCC_Periph, DISABLE);
-
-  /* I2C configuration */
-  I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;
-  I2C_InitStructure.I2C_DutyCycle = I2C_DutyCycle_2;
-  I2C_InitStructure.I2C_OwnAddress1 = MPU6050_DEFAULT_ADDRESS; // MPU6050 7-bit adress = 0x68, 8-bit adress = 0xD0;
-  I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;
-  I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
-  I2C_InitStructure.I2C_ClockSpeed = MPU6050_I2C_Speed;
-
-  /* Apply I2C configuration after enabling it */
-  I2C_Init(MPU6050_I2C, &I2C_InitStructure);
-  /* I2C Peripheral Enable */
-  I2C_Cmd(MPU6050_I2C, ENABLE);
-
-  I2C_StretchClockCmd(MPU6050_I2C, ENABLE);
-}
-
-/**
- * @brief  Reads a block of data from the MPU6050.
- * @param  slaveAddr  : slave address MPU6050_DEFAULT_ADDRESS
- * @param  pBuffer : pointer to the buffer that receives the data read from the MPU6050.
- * @param  readAddr : MPU6050's internal address to read from.
- * @param  NumByteToRead : number of bytes to read from the MPU6050 ( NumByteToRead >1  only for the Mgnetometer readinf).
- * @return None
- */
-void MPU6050_I2C_BufferRead(u8 slaveAddr, u8* pBuffer, u8 readAddr, u16 NumByteToRead)
-{
-  /* While the bus is busy */
-  while (I2C_GetFlagStatus(MPU6050_I2C, I2C_FLAG_BUSY));
+  uint8_t tmpBuffer[14];
+  uint16_t tmpHigh = 0;
+  uint16_t tmpLow = 0;
+  uint8_t index_array;
 
 
-  // Send the address for reading
-  //
-  /* Send START condition */
-  I2C_GenerateSTART(MPU6050_I2C, ENABLE);
+  MPU6050_Writes(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_XOUT_H_ADDR, tmpBuffer, 14);
 
-  /* Test on EV5 and clear it */
-  while (!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_MODE_SELECT));
-
-  /* Send MPU6050 address for write */
-  I2C_Send7bitAddress(MPU6050_I2C, slaveAddr, I2C_Direction_Transmitter);
-
-  /* Test on EV6 and clear it */
-  while (!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
-
-  /* Clear EV6 by setting again the PE bit */
-  I2C_Cmd(MPU6050_I2C, ENABLE);
-
-  /* Send the MPU6050's internal address to write to */
-  I2C_SendData(MPU6050_I2C, readAddr);
-
-  /* Test on EV8 and clear it */
-  while (!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
-
-
-  // Start reading the bytes
-  //
-  /* Send START condition a second time */
-  I2C_GenerateSTART(MPU6050_I2C, ENABLE);
-
-  /* Test on EV5 and clear it */
-  while (!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_MODE_SELECT));
-
-  /* Send MPU6050 address for read */
-  I2C_Send7bitAddress(MPU6050_I2C, slaveAddr, I2C_Direction_Receiver);
-
-  /* Test on EV6 and clear it */
-  while (!I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED));
-
-  /* While there is data to be read */
-  while (NumByteToRead)
+  /* Get acceleration */
+  for (index_array = 0; index_array < 7; index_array++)
   {
-      if (NumByteToRead == 1)
-      {
-	  /* Disable Acknowledgement */
-	  I2C_AcknowledgeConfig(MPU6050_I2C, DISABLE);
-
-	  /* Send STOP Condition */
-	  I2C_GenerateSTOP(MPU6050_I2C, ENABLE);
-      }
-
-      /* Test on EV7 and clear it */
-      if (I2C_CheckEvent(MPU6050_I2C, I2C_EVENT_MASTER_BYTE_RECEIVED))
-      {
-	  /* Read a byte from the MPU6050 */
-	  *pBuffer = I2C_ReceiveData(MPU6050_I2C);
-
-	  /* Point to the next location where the byte read will be saved */
-	  pBuffer++;
-
-	  /* Decrement the read bytes counter */
-	  NumByteToRead--;
-      }
+    if(3 != index_array)
+    {
+      tmpHigh = ((uint16_t)tmpBuffer[index_array << 1] << (uint16_t)8 ) & 0xFF00;
+      tmpLow = (uint16_t)tmpBuffer[(index_array << 1) | 0x0001] & 0x00FF;
+      AccelGyro[index_array] = tmpHigh | tmpLow;
+    }
   }
-
-  /* Enable Acknowledgement to be ready for another reception */
-  I2C_AcknowledgeConfig(MPU6050_I2C, ENABLE);
 }
+
 /**
  * @}
- *//* end of group MPU6050_Library */
+ */
+/***** END OF FILE ****/

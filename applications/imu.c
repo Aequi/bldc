@@ -56,7 +56,7 @@ BOOL IMU_init(void)
       accel_gyro_average[4] += accel_gyro[4];
       accel_gyro_average[5] += accel_gyro[5];
 
-      delay_ms(50); //wait for 50ms for the gyro to stable
+      chThdSleepMilliseconds(50); //wait for 50ms for the gyro to stable
     }
 
     accel_gyro_average[0] /= 10;
