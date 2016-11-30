@@ -1,27 +1,24 @@
 /* ============================================================================================
 * MPU6050_Config.h
-* Author:   Anh Vo Tuan
-* Email:  votuananhs@gmailc.om
-* Brief:  The file is used to define parameters which use in the MPU6050 driver.
-*       It will be compatible with ChibiOS.
+*
+*   This program is free software: you can redistribute it and/or modify
+*   it under the terms of the GNU General Public License as published by
+*   the Free Software Foundation, either version 3 of the License, or
+*   (at your option) any later version.
+*
+*   This program is distributed in the hope that it will be useful,
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*   GNU General Public License for more details.
+*
+*   You should have received a copy of the GNU General Public License
+*   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *   ------------------------------------------------------------------------------
-*  Permission is hereby granted, free of charge, to any person obtaining a copy
-*  of this software and associated documentation files (the "Software"), to deal
-*  in the Software without restriction, including without limitation the rights
-*  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-*  copies of the Software, and to permit persons to whom the Software is
-*  furnished to do so, subject to the following conditions:
-* 
-*  The above copyright notice and this permission notice shall be included in
-*  all copies or substantial portions of the Software.
-* 
-*  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-*  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-*  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-*  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-*  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-*  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-*  THE SOFTWARE.
+* Author:   Anh Vo Tuan
+* Email:    votuananhs@gmail.com
+* Brief:    The file is used to define parameters which use in the MPU6050 driver.
+*           It will be compatible with ChibiOS.
+*
 *  ============================================================================================
 */
 
@@ -43,7 +40,7 @@
  * See section 22.7.7 on the STM32 reference manual.
  */
 static const I2CConfig i2cfg = {
-    OPMODE_SMBUS_HOST,
+    OPMODE_I2C,
     MPU6050_CLOCK_SPEED_I2C,
     STD_DUTY_CYCLE
 };
@@ -401,7 +398,7 @@ uint8_t MPU6050_GetSleepModeStatus(void)
  * @param AccelGyro 16-bit signed integer array of length 6
  * @see MPU6050_RA_ACCEL_XOUT_H
  */
-void MPU6050_GetRawAccelGyro(uint16_t *AccelGyro)
+void MPU6050_GetRawAccelGyro(int16_t *AccelGyro)
 {
   uint8_t tmpBuffer[14];
   uint16_t tmpHigh = 0;
@@ -412,14 +409,19 @@ void MPU6050_GetRawAccelGyro(uint16_t *AccelGyro)
   MPU6050_Writes(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_XOUT_H_ADDR, tmpBuffer, 14);
 
   /* Get acceleration */
-  for (index_array = 0; index_array < 7; index_array++)
+  for (index_array = 0; index_array < 3; index_array++)
   {
-    if(3 != index_array)
-    {
-      tmpHigh = ((uint16_t)tmpBuffer[index_array << 1] << (uint16_t)8 ) & 0xFF00;
-      tmpLow = (uint16_t)tmpBuffer[(index_array << 1) | 0x0001] & 0x00FF;
+      tmpHigh = (int16_t)(((uint16_t)tmpBuffer[index_array << 1] << (uint16_t)8 ) & 0xFF00);
+      tmpLow = (int16_t)((uint16_t)tmpBuffer[(index_array << 1) | 0x0001] & 0x00FF);
       AccelGyro[index_array] = tmpHigh | tmpLow;
-    }
+  }
+
+  /* Get gyroscope */
+  for (index_array = 4; index_array < 7; index_array++)
+  {
+      tmpHigh = (int16_t)(((uint16_t)tmpBuffer[index_array << 1] << (uint16_t)8 ) & 0xFF00);
+      tmpLow = (int16_t)((uint16_t)tmpBuffer[(index_array << 1) | 0x0001] & 0x00FF);
+      AccelGyro[index_array-1] = tmpHigh | tmpLow;
   }
 }
 
