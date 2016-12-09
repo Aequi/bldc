@@ -27,7 +27,6 @@
 #include "hal.h"
 #include "string.h"
 #include "stdlib.h"
-#include "stm32f4xx_conf.h"
 #include "MPU6050.h"
 #include "MPU6050_Config.h"
 

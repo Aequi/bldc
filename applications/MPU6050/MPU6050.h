@@ -29,7 +29,12 @@
 extern "C" {
 #endif
 
+#include "ch.h"
 #include "datatypes.h"
+
+#if ((CH_KERNEL_MAJOR != 3) || (CH_KERNEL_MINOR != 0) || (CH_KERNEL_PATCH != 1))
+	#error "The current, The MPU6050 driver only support ChibiOS ver 3.0.1."
+#endif
 
 #define MPU6050_ADDRESS_AD0_LOW     0x68 // address pin low (GND), default for InvenSense evaluation board
 #define MPU6050_ADDRESS_AD0_HIGH    0x69 // address pin high (VCC)

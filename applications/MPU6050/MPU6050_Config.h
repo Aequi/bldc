@@ -44,7 +44,7 @@ extern "C" {
 /* The channel I2C of STM32F4xx will be connected with MPU6050 */
 #if (MPU6050_USING_I2C1 == TRUE)
 	#define MPU6050_HW_I2C_DEV			I2CD1
-	#define MPU6050_HW_I2C_GPIO_AF		GPIO_AF_I2C1
+	#define MPU6050_HW_I2C_GPIO_AF		((uint8_t)0x04)
 	#define MPU6050_HW_I2C_SCL_PORT		GPIOA
 	#define MPU6050_HW_I2C_SCL_PIN		10
 	#define MPU6050_HW_I2C_SDA_PORT		GPIOA
@@ -52,7 +52,7 @@ extern "C" {
 
 #elif (MPU6050_USING_I2C2 == TRUE)
 	#define MPU6050_HW_I2C_DEV			I2CD2
-	#define MPU6050_HW_I2C_GPIO_AF		GPIO_AF_I2C2
+	#define MPU6050_HW_I2C_GPIO_AF		((uint8_t)0x04)
 	#define MPU6050_HW_I2C_SCL_PORT		GPIOB
 	#define MPU6050_HW_I2C_SCL_PIN		10
 	#define MPU6050_HW_I2C_SDA_PORT		GPIOB
@@ -60,7 +60,7 @@ extern "C" {
 
 #elif (MPU6050_USING_I2C3 == TRUE)
 	#define MPU6050_HW_I2C_DEV			I2CD3
-	#define MPU6050_HW_I2C_GPIO_AF		GPIO_AF_I2C3
+	#define MPU6050_HW_I2C_GPIO_AF		((uint8_t)0x04)
 	#define MPU6050_HW_I2C_SCL_PORT		GPIOB
 	#define MPU6050_HW_I2C_SCL_PIN		10
 	#define MPU6050_HW_I2C_SDA_PORT		GPIOB

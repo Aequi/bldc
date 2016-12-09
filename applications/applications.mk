@@ -9,6 +9,8 @@ APPSRC =	applications/app.c \
 APPINC = 	applications
 
 # Add new files for the MPU6050 driver
-APPSRC +=	applications/MPU6050/MPU6050.c
+include applications/MPU6050/mpu6050.mk
 
-APPINC += 	applications/MPU6050
+APPSRC +=	$(MPU6050SRC)
+
+APPINC += 	$(MPU6050INC)
