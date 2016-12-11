@@ -8,6 +8,7 @@
 #include "chprintf.h"
 
 #include "comm_usb_serial.h"
+#include "mpu6050.h"
 
 #define SHELL_WA_SIZE   THD_WORKING_AREA_SIZE(4096)
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(512)
@@ -46,16 +47,24 @@ static THD_FUNCTION(Thread1, arg) {
   chRegSetThreadName("blinker");
   while (true) {
     palSetPad(GPIOD, GPIOD_LED3);       /* Orange.  */
-    main_printf("Turn on led3\r\n");
     chThdSleepMilliseconds(500);
     palClearPad(GPIOD, GPIOD_LED3);     /* Orange.  */
-    main_printf("Turn off led3\r\n");
     chThdSleepMilliseconds(500);
   }
 }
 
+/*
+* read value from mpu6050 and print on terminal
+*/
+static THD_WORKING_AREA(waThread2, 128);
+static THD_FUNCTION(Thread2, arg) {
+    chThdSleepMilliseconds(1000);
+}
+
+
 int main(void) {
 	thread_t *shelltp = NULL;
+  uint8_t temp_id_mpu6050;
 
 	// For ChibiOS
 	halInit();
@@ -66,10 +75,28 @@ int main(void) {
 	//shellInit();
 
 	chThdSleepMilliseconds(1000);
-  main_printf("AnhVT6\r\n");
-  chThdSleepMilliseconds(2000);
+
+  // initial mpu6050
+  main_printf("Read value Accel and Gyro from MPU6050:\r\n");
+  MPU6050_Init();
+  chThdSleepMilliseconds(1000);
+
+
+
+  temp_id_mpu6050 = MPU6050_TestConnection();
+  main_printf("ID MPU6050: %d\r\n",temp_id_mpu6050);
+  if (temp_id_mpu6050)
+  {
+    main_printf("Successful connection with the mpu6050 board\r\n");
+  }
+  else
+  {
+    main_printf("Connection is false !!!\r\n");
+  }
+
 
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);
+  chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL);
 
 	// Main loop where only the shell is handled
 	for(;;) {

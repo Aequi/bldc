@@ -175,7 +175,7 @@ static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data,
   memcpy(&txbuf[1], data, number_bytes);
 
   i2cAcquireBus(&MPU6050_HW_I2C_DEV);
-  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, &txbuf[0], 1, rxbuf, 0, tmo);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, number_bytes + 1, rxbuf, 0, tmo);
   i2cReleaseBus(&MPU6050_HW_I2C_DEV);
 
   free(txbuf);
@@ -212,7 +212,6 @@ static uint8_t MPU6050_WriteMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t dat
 
 static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
 {
-  uint8_t *rxbuf = data;
   uint8_t txbuf[2] = {0, 0};
   systime_t tmo = MS2ST(5);
   msg_t status = MSG_OK;
@@ -222,7 +221,7 @@ static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, 
   txbuf[1] = (slaveAddr << 1) | 0x01;
 
   i2cAcquireBus(&MPU6050_HW_I2C_DEV);
-  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, 2, rxbuf, number_bytes, tmo);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, 2, data, number_bytes, tmo);
   i2cReleaseBus(&MPU6050_HW_I2C_DEV);
 
   if((MSG_RESET == status)||(MSG_TIMEOUT == status))
