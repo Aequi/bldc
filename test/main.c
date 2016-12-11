@@ -58,13 +58,37 @@ static THD_FUNCTION(Thread1, arg) {
 */
 static THD_WORKING_AREA(waThread2, 128);
 static THD_FUNCTION(Thread2, arg) {
+  uint8_t temp_id_mpu6050;
+  int16_t Accel_Gyro_Data[7];
+
+
+  // initial mpu6050
+  main_printf("Read value Accel and Gyro from MPU6050:\r\n");
+  MPU6050_Init();
+  chThdSleepMilliseconds(1000);
+
+  temp_id_mpu6050 = MPU6050_TestConnection();
+  //main_printf("ID MPU6050: %d\r\n",MPU6050_GetDeviceID());
+  if (temp_id_mpu6050)
+  {
+    main_printf("Successful connection with the mpu6050 board\r\n");
+  }
+  else
+  {
+    main_printf("Connection is false !!!\r\n");
+  }
+
+  for(;;) {
+    //main_printf("ID MPU6050: %d\r\n",MPU6050_GetDeviceID());
+    MPU6050_GetRawAccelGyro(Accel_Gyro_Data);
+    main_printf("Accel_X = %d\tAccel_Y = %d\tAccel_Z = %d\r\n",Accel_Gyro_Data[0],Accel_Gyro_Data[1],Accel_Gyro_Data[2]);
     chThdSleepMilliseconds(1000);
+  }
 }
 
 
 int main(void) {
-	thread_t *shelltp = NULL;
-  uint8_t temp_id_mpu6050;
+	//thread_t *shelltp = NULL;
 
 	// For ChibiOS
 	halInit();
@@ -75,24 +99,6 @@ int main(void) {
 	//shellInit();
 
 	chThdSleepMilliseconds(1000);
-
-  // initial mpu6050
-  main_printf("Read value Accel and Gyro from MPU6050:\r\n");
-  MPU6050_Init();
-  chThdSleepMilliseconds(1000);
-
-
-
-  temp_id_mpu6050 = MPU6050_TestConnection();
-  main_printf("ID MPU6050: %d\r\n",temp_id_mpu6050);
-  if (temp_id_mpu6050)
-  {
-    main_printf("Successful connection with the mpu6050 board\r\n");
-  }
-  else
-  {
-    main_printf("Connection is false !!!\r\n");
-  }
 
 
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);

@@ -175,7 +175,7 @@ static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data,
   memcpy(&txbuf[1], data, number_bytes);
 
   i2cAcquireBus(&MPU6050_HW_I2C_DEV);
-  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, number_bytes + 1, rxbuf, 0, tmo);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, (number_bytes + 1), rxbuf, 0, tmo);
   i2cReleaseBus(&MPU6050_HW_I2C_DEV);
 
   free(txbuf);
@@ -221,7 +221,7 @@ static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, 
   txbuf[1] = (slaveAddr << 1) | 0x01;
 
   i2cAcquireBus(&MPU6050_HW_I2C_DEV);
-  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, 2, data, number_bytes, tmo);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, 1, data, number_bytes, tmo);
   i2cReleaseBus(&MPU6050_HW_I2C_DEV);
 
   if((MSG_RESET == status)||(MSG_TIMEOUT == status))
@@ -263,24 +263,24 @@ void MPU6050_Init(void)
 
   /* 2. Initialize MPU6050 */
   //reset the whole module first
-  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, MPU6050_PWR_1_RESET_SET, MPU6050_PWR_1_RESET_MASK, MPU6050_PWR_1_RESET_OFFSET);
+  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, 0x80);
 
   chThdSleepMilliseconds(50); //wait for 50ms for the gyro to stable
 
   //PLL with Z axis gyroscope reference
-  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, MPU6050_PWR_1_CLKSEL_PLL_ZGYRO, MPU6050_PWR_1_CLKSEL_MASK, MPU6050_PWR_1_CLKSEL_OFFSET);
-	
-  //DLPF_CFG = 3: Fs=1khz; bandwidth=42hz	
-  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_CONFIG_ADDR, MPU6050_CONFIG_DLPF_CFG_3, MPU6050_CONFIG_DLPF_CFG_MASK, MPU6050_CONFIG_DLPF_CFG_OFFSET);
-    	
+	MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, 0x03);
+
+  //DLPF_CFG = 3: Fs=1khz; bandwidth=42hz		
+  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_CONFIG_ADDR, 0x03);
+
   //500Hz sample rate ~ 2ms
   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_SMPLRT_DIV_ADDR, 0x01);
 
   //Gyro full scale setting
-  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_GYRO_CONFIG_ADDR, MPU6050_GCONFIG_FS_SEL_2000, MPU6050_GCONFIG_FS_SEL_MASK, MPU6050_GCONFIG_FS_SEL_OFFSET);
+  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_GYRO_CONFIG_ADDR, 0x18);
    
   //Accel full scale setting
-  MPU6050_WriteMask(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_CONFIG_ADDR, MPU6050_ACONFIG_AFS_SEL_16g, MPU6050_ACONFIG_AFS_SEL_MASK, MPU6050_ACONFIG_AFS_SEL_OFFSET);
+  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_CONFIG_ADDR, 0x18);
 
   //reset gyro and accel sensor
   MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_SIGNAL_PATH_RESET_ADDR, 0x07);
@@ -404,7 +404,7 @@ void MPU6050_GetRawAccelGyro(int16_t *AccelGyro)
   uint8_t index_array;
 
 
-  MPU6050_Writes(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_XOUT_H_ADDR, tmpBuffer, 14);
+  MPU6050_Reads(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_XOUT_H_ADDR, tmpBuffer, 14);
 
   /* Get acceleration */
   for (index_array = 0; index_array < 3; index_array++)
