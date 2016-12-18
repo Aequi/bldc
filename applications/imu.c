@@ -29,6 +29,7 @@
 
 KalmanFilterType gyroPitchAxis;
 KalmanFilterType gyroRollAxis;
+double pitch, roll;
 
 static THD_WORKING_AREA(waProcessDataMpu6050, 128);
 static THD_FUNCTION(ProcessDataMpu6050, arg);
@@ -56,7 +57,6 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
   int16_t Accel_Gyro_Data[6];
   double accX, accY, accZ;
   double gyroX, gyroY, gyroZ;
-  double pitch, roll;
   uint32_t timer, temp_timer;
   double gyroXangle, gyroYangle; // Angle calculate using the gyro only
   double compAngleX, compAngleY; // Calculated angle using a complementary filter
@@ -71,7 +71,6 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
   accZ = (double)Accel_Gyro_Data[2];
   gyroX = (double)Accel_Gyro_Data[3];
   gyroY = (double)Accel_Gyro_Data[4];
-  gyroZ = (double)Accel_Gyro_Data[5];
 
   // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
   // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
@@ -101,7 +100,6 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
     accZ = (double)Accel_Gyro_Data[2];
     gyroX = (double)Accel_Gyro_Data[3];
     gyroY = (double)Accel_Gyro_Data[4];
-    gyroZ = (double)Accel_Gyro_Data[5];
 
     // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
     // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
