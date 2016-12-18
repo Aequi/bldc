@@ -106,6 +106,7 @@ include $(CHIBIOS)/os/rt/rt.mk
 include $(CHIBIOS)/os/rt/ports/ARMCMx/compilers/GCC/mk/port_v7m.mk
 # Other files (optional).
 include $(CHIBIOS)/../applications/MPU6050/mpu6050.mk
+#include $(CHIBIOS)/../applications/applications.mk
 
 # Define linker script file here
 LDSCRIPT= ../ld_eeprom_emu.ld
@@ -124,6 +125,7 @@ CSRC = $(STARTUPSRC) \
        $(CHIBIOS)/os/various/shell.c \
        main.c \
        $(CHIBIOS)/../$(MPU6050SRC) \
+       $(CHIBIOS)/../applications/imu.c \
        comm_usb_serial.c
 
 
@@ -158,7 +160,8 @@ INCDIR = $(STARTUPINC) $(KERNINC) $(PORTINC) $(OSALINC) \
          $(HALINC) $(PLATFORMINC) $(BOARDINC) $(TESTINC) \
          $(CHIBIOS)/os/various \
          $(CHIBIOS)/os/hal/lib/streams \
-         $(CHIBIOS)/../$(MPU6050INC) \
+       	 $(CHIBIOS)/../$(MPU6050INC) \
+       	 $(CHIBIOS)/../applications \
          .
 
 

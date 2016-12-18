@@ -130,6 +130,12 @@ extern "C" {
 /* GYRO_XOUT_H */
 #define MPU6050_GYRO_XOUT_H_ADDR		0x43
 
+/* GYRO_YOUT_H */
+#define MPU6050_GYRO_YOUT_H_ADDR		0x45
+
+/* GYRO_ZOUT_H */
+#define MPU6050_GYRO_ZOUT_H_ADDR		0x47
+
 /* SIGNAL_PATH_RESET */
 #define MPU6050_SIGNAL_PATH_RESET_ADDR	0x68
 #define MPU6050_SIGNAL_GYRO_RESET_MASK		0x04
@@ -174,18 +180,26 @@ extern "C" {
 
 void MPU6050_Init(void);
 
+/* WHO_AM_I register */
+uint8_t MPU6050_GetDeviceID(void);
 uint8_t MPU6050_TestConnection(void);
 
-// GYRO_CONFIG register
+/* GYRO_CONFIG register */
 uint8_t MPU6050_GetFullScaleGyroRange(void);
-// ACCEL_CONFIG register
+/* ACCEL_CONFIG register */
 uint8_t MPU6050_GetFullScaleAccelRange(void);
-// PWR_MGMT_1 register
+/* PWR_MGMT_1 register */
 uint8_t MPU6050_GetSleepModeStatus(void);
-// WHO_AM_I register
-uint8_t MPU6050_GetDeviceID(void);
 
 void MPU6050_GetRawAccelGyro(int16_t *AccelGyro);
+
+void MPU6050_GetGyroRoll(int16_t *GyroRoll);
+
+void MPU6050_GetGyroPitch(int16_t *GyroPitch);
+
+void MPU6050_GetGyroYaw(int16_t *GyroYaw);
+
+float MPU6050_GetOffsetPitch(void);
 
 void MPU6050_DeInit(void);
 

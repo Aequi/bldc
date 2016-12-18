@@ -70,7 +70,8 @@ extern "C" {
 #endif
 
 
-
+/* Number of getting sample to detect offset gyroscope */
+#define NUMBER_GET_SAMPLE_OFFSET_GYRO	100
 
 #ifdef __cplusplus
 }

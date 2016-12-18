@@ -53,14 +53,14 @@ static void MPU6050_HwStartI2c(void);
 static void MPU6050_HwStopI2c(void);
 static void MPU6050_HwTryRestoreI2c(void);
 
-static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes);
-static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes);
+static uint8_t MPU6050_Writes(uint8_t regAddr, uint8_t *data, uint8_t number_bytes);
+static uint8_t MPU6050_Reads(uint8_t regAddr, uint8_t *data, uint8_t number_bytes);
 
-static uint8_t MPU6050_Write(uint8_t slaveAddr, uint8_t regAddr, uint8_t data);
-static uint8_t MPU6050_Read(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data);
+static uint8_t MPU6050_Write(uint8_t regAddr, uint8_t data);
+static uint8_t MPU6050_Read(uint8_t regAddr, uint8_t *data);
 
-static uint8_t MPU6050_WriteMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t data, uint8_t mask, uint8_t offset);
-static uint8_t MPU6050_ReadMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t mask, uint8_t offset);
+static uint8_t MPU6050_WriteMask(uint8_t regAddr, uint8_t data, uint8_t mask, uint8_t offset);
+static uint8_t MPU6050_ReadMask(uint8_t regAddr, uint8_t *data, uint8_t mask, uint8_t offset);
 
 
 
@@ -162,7 +162,7 @@ static void MPU6050_HwTryRestoreI2c(void) {
 
 
 
-static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
+static uint8_t MPU6050_Writes(uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
 {
   uint8_t rxbuf[1];
   uint8_t *txbuf = NULL;
@@ -175,7 +175,7 @@ static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data,
   memcpy(&txbuf[1], data, number_bytes);
 
   i2cAcquireBus(&MPU6050_HW_I2C_DEV);
-  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, (number_bytes + 1), rxbuf, 0, tmo);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, MPU6050_DEFAULT_ADDRESS, txbuf, (number_bytes + 1), rxbuf, 0, tmo);
   i2cReleaseBus(&MPU6050_HW_I2C_DEV);
 
   free(txbuf);
@@ -189,28 +189,28 @@ static uint8_t MPU6050_Writes(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data,
 }
 
 
-static uint8_t MPU6050_Write(uint8_t slaveAddr, uint8_t regAddr, uint8_t data)
+static uint8_t MPU6050_Write(uint8_t regAddr, uint8_t data)
 {
-  return MPU6050_Writes(slaveAddr, regAddr, &data, 1);
+  return MPU6050_Writes(regAddr, &data, 1);
 }
 
 
-static uint8_t MPU6050_WriteMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t data, uint8_t mask, uint8_t offset)
+static uint8_t MPU6050_WriteMask(uint8_t regAddr, uint8_t data, uint8_t mask, uint8_t offset)
 {
   uint8_t temp_data = 0;
   uint8_t temp_result = FALSE;
 
-  temp_result = MPU6050_Reads(slaveAddr, regAddr, &temp_data, 1);
+  temp_result = MPU6050_Reads(regAddr, &temp_data, 1);
   if(TRUE == temp_result)
   {
     temp_data = (temp_data & (!mask)) | (data << offset);
-    temp_result = MPU6050_Writes(slaveAddr, regAddr, &temp_data, 1);
+    temp_result = MPU6050_Writes(regAddr, &temp_data, 1);
   }
   return temp_result;
 }
 
 
-static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
+static uint8_t MPU6050_Reads(uint8_t regAddr, uint8_t *data, uint8_t number_bytes)
 {
   uint8_t txbuf[2] = {0, 0};
   systime_t tmo = MS2ST(5);
@@ -218,10 +218,10 @@ static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, 
   uint8_t temp_result = TRUE;
 
   txbuf[0] = regAddr;
-  txbuf[1] = (slaveAddr << 1) | 0x01;
+  txbuf[1] = (MPU6050_DEFAULT_ADDRESS << 1) | 0x01;
 
   i2cAcquireBus(&MPU6050_HW_I2C_DEV);
-  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, slaveAddr, txbuf, 1, data, number_bytes, tmo);
+  status = i2cMasterTransmitTimeout(&MPU6050_HW_I2C_DEV, MPU6050_DEFAULT_ADDRESS, txbuf, 1, data, number_bytes, tmo);
   i2cReleaseBus(&MPU6050_HW_I2C_DEV);
 
   if((MSG_RESET == status)||(MSG_TIMEOUT == status))
@@ -232,18 +232,17 @@ static uint8_t MPU6050_Reads(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, 
   return temp_result;
 }
 
-static uint8_t MPU6050_Read(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data)
+static uint8_t MPU6050_Read(uint8_t regAddr, uint8_t *data)
 {
-  return MPU6050_Reads(slaveAddr, regAddr, data, 1);
+  return MPU6050_Reads(regAddr, data, 1);
 }
 
-
-static uint8_t MPU6050_ReadMask(uint8_t slaveAddr, uint8_t regAddr, uint8_t *data, uint8_t mask, uint8_t offset)
+static uint8_t MPU6050_ReadMask(uint8_t regAddr, uint8_t *data, uint8_t mask, uint8_t offset)
 {
   uint8_t temp_data = 0;
   uint8_t temp_result = FALSE;
 
-  temp_result = MPU6050_Reads(slaveAddr, regAddr, &temp_data, 1);
+  temp_result = MPU6050_Reads(regAddr, &temp_data, 1);
   if(TRUE == temp_result)
   {
     temp_data = (temp_data & mask) >> offset;
@@ -262,28 +261,34 @@ void MPU6050_Init(void)
   MPU6050_HwStartI2c();
 
   /* 2. Initialize MPU6050 */
-  //reset the whole module first
-  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, 0x80);
+  /* Reset the whole module first */
+  MPU6050_Write(MPU6050_PWR_MGMT_1_ADDR, 0x80);
 
   chThdSleepMilliseconds(50); //wait for 50ms for the gyro to stable
 
-  //PLL with Z axis gyroscope reference
-	MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, 0x03);
+  /* PLL with Z axis gyroscope reference */
+  //MPU6050_Write(MPU6050_PWR_MGMT_1_ADDR, 0x03);
+  MPU6050_Write(MPU6050_PWR_MGMT_1_ADDR, 0x0);
 
-  //DLPF_CFG = 3: Fs=1khz; bandwidth=42hz		
-  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_CONFIG_ADDR, 0x03);
+  /* DLPF_CFG = 3: Fs=1kHz; bandwidth=42Hz */
+  //MPU6050_Write(MPU6050_CONFIG_ADDR, 0x03);
+  /* DLPF_CFG = 1: Fs=1kHz; bandwidth=188Hz */
+  MPU6050_Write(MPU6050_CONFIG_ADDR, 0x0);
 
-  //500Hz sample rate ~ 2ms
-  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_SMPLRT_DIV_ADDR, 0x01);
+  /* 500Hz sample rate ~ 2ms */
+  //MPU6050_Write(MPU6050_SMPLRT_DIV_ADDR, 0x01);
+  /* 1kHz sample rate ~ 1ms */
+  MPU6050_Write(MPU6050_SMPLRT_DIV_ADDR, 0);
 
-  //Gyro full scale setting
-  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_GYRO_CONFIG_ADDR, 0x18);
+  /* Gyro full scale setting */
+  MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x18);
+  MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x10);
    
-  //Accel full scale setting
-  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_CONFIG_ADDR, 0x18);
+  /* Accel full scale setting */
+  MPU6050_Write(MPU6050_ACCEL_CONFIG_ADDR, 0x18);
 
-  //reset gyro and accel sensor
-  MPU6050_Write(MPU6050_DEFAULT_ADDRESS, MPU6050_SIGNAL_PATH_RESET_ADDR, 0x07);
+  /* Reset gyro and accel sensor */
+  MPU6050_Write(MPU6050_SIGNAL_PATH_RESET_ADDR, 0x07);
 }
 
 
@@ -318,7 +323,7 @@ uint8_t MPU6050_TestConnection(void)
 uint8_t MPU6050_GetDeviceID(void)
 {
   uint8_t tmp;
-  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_WHO_AM_I_ADDR, &tmp, MPU6050_WHO_AM_I_MASK, MPU6050_WHO_AM_I_OFFSET);
+  MPU6050_ReadMask(MPU6050_WHO_AM_I_ADDR, &tmp, MPU6050_WHO_AM_I_MASK, MPU6050_WHO_AM_I_OFFSET);
   return tmp;
 }
 
@@ -344,7 +349,7 @@ uint8_t MPU6050_GetDeviceID(void)
 uint8_t MPU6050_GetFullScaleGyroRange(void)
 {
   uint8_t tmp;
-  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_GYRO_CONFIG_ADDR, &tmp, MPU6050_GCONFIG_FS_SEL_MASK, MPU6050_GCONFIG_FS_SEL_OFFSET);
+  MPU6050_ReadMask(MPU6050_GYRO_CONFIG_ADDR, &tmp, MPU6050_GCONFIG_FS_SEL_MASK, MPU6050_GCONFIG_FS_SEL_OFFSET);
   return tmp;
 }
 
@@ -368,7 +373,7 @@ uint8_t MPU6050_GetFullScaleGyroRange(void)
 uint8_t MPU6050_GetFullScaleAccelRange(void)
 {
   uint8_t tmp;
-  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_CONFIG_ADDR, &tmp, MPU6050_ACONFIG_AFS_SEL_MASK, MPU6050_ACONFIG_AFS_SEL_OFFSET);
+  MPU6050_ReadMask(MPU6050_ACCEL_CONFIG_ADDR, &tmp, MPU6050_ACONFIG_AFS_SEL_MASK, MPU6050_ACONFIG_AFS_SEL_OFFSET);
   return tmp;
 }
 
@@ -386,7 +391,7 @@ uint8_t MPU6050_GetFullScaleAccelRange(void)
 uint8_t MPU6050_GetSleepModeStatus(void)
 {
   uint8_t tmp;
-  MPU6050_ReadMask(MPU6050_DEFAULT_ADDRESS, MPU6050_PWR_MGMT_1_ADDR, &tmp, MPU6050_PWR_1_SLEEP_MASK, MPU6050_PWR_1_SLEEP_OFFSET);
+  MPU6050_ReadMask(MPU6050_PWR_MGMT_1_ADDR, &tmp, MPU6050_PWR_1_SLEEP_MASK, MPU6050_PWR_1_SLEEP_OFFSET);
   return tmp == 0x00 ? FALSE : TRUE;
 }
 
@@ -404,7 +409,7 @@ void MPU6050_GetRawAccelGyro(int16_t *AccelGyro)
   uint8_t index_array;
 
 
-  MPU6050_Reads(MPU6050_DEFAULT_ADDRESS, MPU6050_ACCEL_XOUT_H_ADDR, tmpBuffer, 14);
+  MPU6050_Reads(MPU6050_ACCEL_XOUT_H_ADDR, tmpBuffer, 14);
 
   /* Get acceleration */
   for (index_array = 0; index_array < 3; index_array++)
@@ -421,6 +426,44 @@ void MPU6050_GetRawAccelGyro(int16_t *AccelGyro)
       tmpLow = (int16_t)((uint16_t)tmpBuffer[(index_array << 1) | 0x0001] & 0x00FF);
       AccelGyro[index_array-1] = tmpHigh | tmpLow;
   }
+}
+
+void MPU6050_GetGyroRoll(int16_t *GyroRoll)
+{
+  int8_t tmpBuffer[2];
+  MPU6050_Reads(MPU6050_GYRO_XOUT_H_ADDR, tmpBuffer, 2);
+  *GyroRoll = (int16_t)(((uint16_t)tmpBuffer[0] << (uint16_t)8 ) & 0xFF00);
+  *GyroRoll |= (int16_t)((uint16_t)tmpBuffer[1] & 0x00FF);
+}
+
+void MPU6050_GetGyroPitch(int16_t *GyroPitch)
+{
+  int8_t tmpBuffer[2];
+  MPU6050_Reads(MPU6050_GYRO_YOUT_H_ADDR, tmpBuffer, 2);
+  *GyroPitch = (int16_t)(((uint16_t)tmpBuffer[0] << (uint16_t)8 ) & 0xFF00);
+  *GyroPitch |= (int16_t)((uint16_t)tmpBuffer[1] & 0x00FF);
+}
+
+void MPU6050_GetGyroYaw(int16_t *GyroYaw)
+{
+  int8_t tmpBuffer[2];
+  MPU6050_Reads(MPU6050_GYRO_ZOUT_H_ADDR, tmpBuffer, 2);
+  *GyroYaw = (int16_t)(((uint16_t)tmpBuffer[0] << (uint16_t)8 ) & 0xFF00);
+  *GyroYaw |= (int16_t)((uint16_t)tmpBuffer[1] & 0x00FF);
+}
+
+
+float MPU6050_GetOffsetPitch(void)
+{
+  uint8_t index;
+  int16_t valuePitch;
+  int16_t totalValuePitch = 0;
+  for(index = 0; index < NUMBER_GET_SAMPLE_OFFSET_GYRO; index++)
+  {
+    MPU6050_GetGyroPitch(&valuePitch);
+    totalValuePitch += valuePitch;
+  }
+  return ((float)totalValuePitch/(NUMBER_GET_SAMPLE_OFFSET_GYRO));
 }
 
 /**

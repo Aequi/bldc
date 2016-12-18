@@ -1,136 +1,182 @@
-/*  Copyright (C) 2015 Joerg Hoener
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+/* ============================================================================================
+* MPU6050.h
+*
+* This program is free software: you can redistribute it and/or modify
+*   it under the terms of the GNU General Public License as published by
+*   the Free Software Foundation, either version 3 of the License, or
+*   (at your option) any later version.
+*
+*   This program is distributed in the hope that it will be useful,
+*   but WITHOUT ANY WARRANTY; without even the implied warranty of
+*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*   GNU General Public License for more details.
+*
+*   You should have received a copy of the GNU General Public License
+*   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*   ------------------------------------------------------------------------------
+* Author:   Anh Vo Tuan
+* Email:  votuananhs@gmail.com
+* Brief:  The file is used to define parameters which use in the MPU6050 driver.
+*       It will be compatible with ChibiOS.
+*
+*  ============================================================================================
 */
 
-#include "stm32f10x.h"
+#include "ch.h"
 #include "imu.h"
-#include "math.h"
-#include "MPU6050/MPU6050.h"
-#include "tinystdio/tinystdio.h"
-#include "motor.h"
+#include "Kalman.h"
+#include "mpu6050.h"
 
-// X axis gives the front/rear inclination of the wheel
-// Z axis gives the lateral inclination of the wheel
+KalmanFilterType gyroPitchAxis;
+KalmanFilterType gyroRollAxis;
 
-static s16 accel_gyro[6];
-static float accel_gyro_average[6];
+static THD_WORKING_AREA(waProcessDataMpu6050, 128);
+static THD_FUNCTION(ProcessDataMpu6050, arg);
 
-BOOL IMU_init(void)
+
+void Imu_Init(void)
 {
-  unsigned int i;
+  /* initialize mpu6050 driver */
+  MPU6050_Init();
+  /* waiting mpu6050 sensor is initialized successfully */
+  chThdSleepMilliseconds(1000);
+  /* initialize some parameters for Kalman filter that will be used for Pitch axis */
+  Kalman_Init(&gyroPitchAxis);
+  Kalman_Init(&gyroRollAxis);
 
-  MPU6050_I2C_Init();
-  MPU6050_Initialize();
+  /* create a thread in ChibiOS to process data of mpu6050 */
+  chThdCreateStatic(waProcessDataMpu6050, sizeof(waProcessDataMpu6050), NORMALPRIO+1, ProcessDataMpu6050, NULL);
+}
 
-  // if the MPU6050 is ready, make "calibration"
-  // read the sensor values and average
-  if (MPU6050_TestConnection())
-  {
-    accel_gyro_average[0] = 0;
-    accel_gyro_average[1] = 0;
-    accel_gyro_average[2] = 0;
-    accel_gyro_average[3] = 0;
-    accel_gyro_average[4] = 0;
-    accel_gyro_average[5] = 0;
 
-    for (i = 0; i <= 10; i++)
+static THD_FUNCTION(ProcessDataMpu6050, arg)
+{
+  chRegSetThreadName("IMU with mpu6050 sensor");
+
+  int16_t Accel_Gyro_Data[6];
+  double accX, accY, accZ;
+  double gyroX, gyroY, gyroZ;
+  double pitch, roll;
+  uint32_t timer, temp_timer;
+  double gyroXangle, gyroYangle; // Angle calculate using the gyro only
+  double compAngleX, compAngleY; // Calculated angle using a complementary filter
+  double kalAngleX, kalAngleY; // Calculated angle using a Kalman filter
+  double dt;
+  double gyroXrate; // Convert to deg/s
+  double gyroYrate; // Convert to deg/s
+
+  MPU6050_GetRawAccelGyro(Accel_Gyro_Data);
+  accX = (double)Accel_Gyro_Data[0];
+  accY = (double)Accel_Gyro_Data[1];
+  accZ = (double)Accel_Gyro_Data[2];
+  gyroX = (double)Accel_Gyro_Data[3];
+  gyroY = (double)Accel_Gyro_Data[4];
+  gyroZ = (double)Accel_Gyro_Data[5];
+
+  // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
+  // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
+  // It is then converted from radians to degrees
+#ifdef RESTRICT_PITCH // Eq. 25 and 26
+  roll  = atan2(accY, accZ) * RAD_TO_DEG;
+  pitch = atan(-accX / sqrt(accY * accY + accZ * accZ)) * RAD_TO_DEG;
+#else // Eq. 28 and 29
+  roll  = atan(accY / sqrt(accX * accX + accZ * accZ)) * RAD_TO_DEG;
+  pitch = atan2(-accX, accZ) * RAD_TO_DEG;
+#endif
+  Kalman_SetAngle(&gyroRollAxis, roll);
+  Kalman_SetAngle(&gyroPitchAxis, pitch);
+  gyroXangle = roll;
+  gyroYangle = pitch;
+  compAngleX = roll;
+  compAngleY = pitch;
+  timer = (uint32_t)ST2S(chVTGetSystemTime());
+
+  for(;;) {
+    MPU6050_GetRawAccelGyro(Accel_Gyro_Data);
+    temp_timer = (uint32_t)ST2S(chVTGetSystemTime());
+    dt = ((double)(temp_timer - timer))/1000000; // Calculate delta time
+    timer = temp_timer;
+    accX = (double)Accel_Gyro_Data[0];
+    accY = (double)Accel_Gyro_Data[1];
+    accZ = (double)Accel_Gyro_Data[2];
+    gyroX = (double)Accel_Gyro_Data[3];
+    gyroY = (double)Accel_Gyro_Data[4];
+    gyroZ = (double)Accel_Gyro_Data[5];
+
+    // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
+    // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
+    // It is then converted from radians to degrees
+#ifdef RESTRICT_PITCH // Eq. 25 and 26
+    roll  = atan2(accY, accZ) * RAD_TO_DEG;
+    pitch = atan(-accX / sqrt(accY * accY + accZ * accZ)) * RAD_TO_DEG;
+#else // Eq. 28 and 29
+    roll  = atan(accY / sqrt(accX * accX + accZ * accZ)) * RAD_TO_DEG;
+    pitch = atan2(-accX, accZ) * RAD_TO_DEG;
+#endif
+
+    gyroXrate = gyroX / 16.384; // Convert to deg/s
+    gyroYrate = gyroY / 16.384; // Convert to deg/s
+
+#ifdef RESTRICT_PITCH
+    // This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
+    if ((roll < -90 && kalAngleX > 90) || (roll > 90 && kalAngleX < -90))
     {
-      MPU6050_GetRawAccelGyro (accel_gyro);
-
-      accel_gyro_average[0] += accel_gyro[0];
-      accel_gyro_average[1] += accel_gyro[1];
-      accel_gyro_average[2] += accel_gyro[2];
-      accel_gyro_average[3] += accel_gyro[3];
-      accel_gyro_average[4] += accel_gyro[4];
-      accel_gyro_average[5] += accel_gyro[5];
-
-      chThdSleepMilliseconds(50); //wait for 50ms for the gyro to stable
+      Kalman_SetAngle(&gyroRollAxis, roll);
+      compAngleX = roll;
+      kalAngleX = roll;
+      gyroXangle = roll;
+    } 
+    else
+    {
+      kalAngleX = Kalman_GetAngle(&gyroRollAxis, roll, gyroXrate, dt); // Calculate the angle using a Kalman filter
     }
 
-    accel_gyro_average[0] /= 10;
-    accel_gyro_average[1] /= 10;
-    accel_gyro_average[2] /= 10;
-    accel_gyro_average[3] /= 10;
-    accel_gyro_average[4] /= 10;
-    accel_gyro_average[5] /= 10;
+    if (abs(kalAngleX) > 90) 
+    {
+      gyroYrate = -gyroYrate; // Invert rate, so it fits the restriced accelerometer reading
+    }
+    kalAngleY = Kalman_GetAngle(&gyroPitchAxis, pitch, gyroYrate, dt);
+#else
+    // This fixes the transition problem when the accelerometer angle jumps between -180 and 180 degrees
+    if ((pitch < -90 && kalAngleY > 90) || (pitch > 90 && kalAngleY < -90)) 
+    {
+      Kalman_SetAngle(&gyroPitchAxis, pitch);
+      compAngleY = pitch;
+      kalAngleY = pitch;
+      gyroYangle = pitch;
+    }
+    else
+    {
+      kalAngleY = Kalman_GetAngle(&gyroPitchAxis, pitch, gyroYrate, dt); // Calculate the angle using a Kalman filter
+    }
 
-    return TRUE;
-  }
-  else
-  {
-    return FALSE;
+    if (abs(kalAngleY) > 90)
+    {
+      gyroXrate = -gyroXrate; // Invert rate, so it fits the restriced accelerometer reading
+    }
+    kalAngleX = Kalman_GetAngle(&gyroRollAxis, roll, gyroXrate, dt); // Calculate the angle using a Kalman filter
+#endif
+
+    gyroXangle += gyroXrate * dt; // Calculate gyro angle without any filter
+    gyroYangle += gyroYrate * dt;
+    //gyroXangle += kalmanX.getRate() * dt; // Calculate gyro angle using the unbiased rate
+    //gyroYangle += kalmanY.getRate() * dt;
+
+    compAngleX = 0.93 * (compAngleX + gyroXrate * dt) + 0.07 * roll; // Calculate the angle using a Complimentary filter
+    compAngleY = 0.93 * (compAngleY + gyroYrate * dt) + 0.07 * pitch;
+
+    // Reset the gyro angle when it has drifted too much
+    if (gyroXangle < -180 || gyroXangle > 180)
+      gyroXangle = kalAngleX;
+    if (gyroYangle < -180 || gyroYangle > 180)
+      gyroYangle = kalAngleY;
+
+    main_printf("%5.3f\t%5.3f\t%5.3f\t%5.3f\t\t",roll, gyroXangle, compAngleX, kalAngleX);
+    main_printf("%5.3f\t%5.3f\t%5.3f\t%5.3f\t\r\n",pitch, gyroYangle, compAngleY, kalAngleY);
+    //main_printf("pitch=%5.3f\tgyroYangle=%5.3f\tcompAngleY=%5.3f\tkalAngleY=%5.3f\r\n",pitch, gyroYangle, compAngleY, kalAngleY);
+
+    chThdSleepMilliseconds(500);
   }
 }
 
-// called at each 10ms
-void balance_controller(void)
-{
-  float acc_x;
-  float acc_y;
-  float acc_z;
-  static float angle;
-  static float old_angle1;
-  static float old_angle2;
-  static float old_angle3;
-  static float gyro_rate;
-  float dt;
-  unsigned int micros_new;
-  static unsigned int micros_old = 0;
-  static unsigned int timer_1s = 0;
-
-  float current_error = 0;
-  static float sum_error = 0;
-  float integral_term = 0;
-  float derivative_term = 0;
-  static float previous_error = 0;
-
-  float speed = 0;
-
-  // read the accel and gyro sensor values
-  MPU6050_GetRawAccelGyro (accel_gyro); // takes abut 15ms to be executed!!!
-
-  acc_x = accel_gyro[0];
-  acc_y = accel_gyro[1];
-  acc_z = accel_gyro[2];
-  gyro_rate = accel_gyro[5] * GYRO_SENSITIVITY;
-
-  // calc dt, using micro seconds value
-  micros_new = micros ();
-  dt = (micros_new - micros_old) / 1000000.0;
-  micros_old = micros_new;
-
-  angle = atan2(acc_x, acc_y); //calc angle between X and Y axis, in rads
-  angle = (angle + PI) * RAD_TO_DEG; //convert from rads to degres
-//  angle = 0.98 * (angle + (gyro_rate * dt)) + 0.02 * (acc_y); //use the complementary filter.
-
-  angle = (0.25 * angle) + (0.25 * old_angle1) + (0.25 * old_angle2) + (0.25 * old_angle3);
-  old_angle1 = angle;
-  old_angle2 = old_angle1;
-  old_angle3 = old_angle2;
-
-  // keep zero value angle when the board is on balance
-  angle = INITIAL_ANGLE - angle;
-
-  if (angle > 3) angle = 3;
-  if (angle < -3) angle = -3;
-
-  if (angle < 0.5) angle = 0;
-  if (angle < -0.5) angle = 0;
-
-  float kp_speed = 50;
-  speed = angle * kp_speed;
-
-  motor_set_duty_cycle ((int) speed); // -1000 <-> 1000
-}
+/***** END OF FILE ****/
