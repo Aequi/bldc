@@ -5,6 +5,7 @@ String stringGyroX, stringGyroY;
 String stringAccX, stringAccY;
 String stringCompX, stringCompY;
 String stringKalmanX, stringKalmanY;
+String stringDt, stringTimer;
 
 final int width = 800;
 final int height = 600;
@@ -65,7 +66,7 @@ void drawGraph() {
     line(0, height/4*i, width, height/4*i); // Draw line, indicating -90 deg, 0 deg and 90 deg
 
   convert();
-  drawAxisX();
+  //drawAxisX();
   drawAxisY();
 }
 
@@ -82,6 +83,8 @@ void serialEvent (Serial serial) {
   stringGyroY = serial.readStringUntil('\t');
   stringCompY = serial.readStringUntil('\t');
   stringKalmanY = serial.readStringUntil('\t');
+  stringDt = serial.readStringUntil('\t');
+  stringTimer = serial.readStringUntil('\t');
 
   serial.clear(); // Clear buffer
   drawValues = true; // Draw the graph
@@ -101,6 +104,8 @@ void printAxis() {
   print(stringGyroY);print('\t');
   print(stringCompY);print('\t');
   print(stringKalmanY);print('\t');
+  print(stringDt);print('\t');
+  print(stringTimer);print('\t');
 
   println();
 }

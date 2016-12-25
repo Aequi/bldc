@@ -282,7 +282,7 @@ void MPU6050_Init(void)
 
   /* Gyro full scale setting */
   MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x18);
-  MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x10);
+  // MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x10);
    
   /* Accel full scale setting */
   MPU6050_Write(MPU6050_ACCEL_CONFIG_ADDR, 0x18);
@@ -428,43 +428,52 @@ void MPU6050_GetRawAccelGyro(int16_t *AccelGyro)
   }
 }
 
-void MPU6050_GetGyroRoll(int16_t *GyroRoll)
-{
-  int8_t tmpBuffer[2];
-  MPU6050_Reads(MPU6050_GYRO_XOUT_H_ADDR, tmpBuffer, 2);
-  *GyroRoll = (int16_t)(((uint16_t)tmpBuffer[0] << (uint16_t)8 ) & 0xFF00);
-  *GyroRoll |= (int16_t)((uint16_t)tmpBuffer[1] & 0x00FF);
-}
 
-void MPU6050_GetGyroPitch(int16_t *GyroPitch)
-{
-  int8_t tmpBuffer[2];
-  MPU6050_Reads(MPU6050_GYRO_YOUT_H_ADDR, tmpBuffer, 2);
-  *GyroPitch = (int16_t)(((uint16_t)tmpBuffer[0] << (uint16_t)8 ) & 0xFF00);
-  *GyroPitch |= (int16_t)((uint16_t)tmpBuffer[1] & 0x00FF);
-}
-
-void MPU6050_GetGyroYaw(int16_t *GyroYaw)
-{
-  int8_t tmpBuffer[2];
-  MPU6050_Reads(MPU6050_GYRO_ZOUT_H_ADDR, tmpBuffer, 2);
-  *GyroYaw = (int16_t)(((uint16_t)tmpBuffer[0] << (uint16_t)8 ) & 0xFF00);
-  *GyroYaw |= (int16_t)((uint16_t)tmpBuffer[1] & 0x00FF);
-}
-
-
-float MPU6050_GetOffsetPitch(void)
+void MPU6050_GetOffsetAxis(double *aX, double *aY, double *aZ, double *gX, double *gY, double *gZ)
 {
   uint8_t index;
-  int16_t valuePitch;
-  int16_t totalValuePitch = 0;
-  for(index = 0; index < NUMBER_GET_SAMPLE_OFFSET_GYRO; index++)
+  int16_t tmpBuffer[6];
+  int32_t totalValue_aX = 0;
+  int32_t totalValue_aY = 0;
+  int32_t totalValue_aZ = 0;
+  int32_t totalValue_gX = 0;
+  int32_t totalValue_gY = 0;
+  int32_t totalValue_gZ = 0;
+  const double  listLsbAccel[4] = { MPU6050_ACCEL_AFS_SEL_2g_LSB,
+                                    MPU6050_ACCEL_AFS_SEL_4g_LSB,
+                                    MPU6050_ACCEL_AFS_SEL_8g_LSB,
+                                    MPU6050_ACCEL_AFS_SEL_16g_LSB };
+
+  for(index = 0; index < NUMBER_GET_SAMPLE_OFFSET; index++)
   {
-    MPU6050_GetGyroPitch(&valuePitch);
-    totalValuePitch += valuePitch;
+    MPU6050_GetRawAccelGyro(tmpBuffer);
+    totalValue_aX += (int32_t)tmpBuffer[0];
+    totalValue_aY += (int32_t)tmpBuffer[1];
+    totalValue_aZ += (int32_t)tmpBuffer[2];
+    totalValue_gX += (int32_t)tmpBuffer[3];
+    totalValue_gY += (int32_t)tmpBuffer[4];
+    totalValue_gZ += (int32_t)tmpBuffer[5];
   }
-  return ((float)totalValuePitch/(NUMBER_GET_SAMPLE_OFFSET_GYRO));
+  *aX = (double)totalValue_aX/(NUMBER_GET_SAMPLE_OFFSET);
+  *aY = (double)totalValue_aY/(NUMBER_GET_SAMPLE_OFFSET);
+  *aZ = (double)totalValue_aZ/(NUMBER_GET_SAMPLE_OFFSET);
+  *gX = (double)totalValue_gX/(NUMBER_GET_SAMPLE_OFFSET);
+  *gY = (double)totalValue_gY/(NUMBER_GET_SAMPLE_OFFSET);
+  *gZ = (double)totalValue_gZ/(NUMBER_GET_SAMPLE_OFFSET);
+  
+#if (ACCEL_INITIAL_CALIBRATION_X_AXIS == TRUE)
+  *aX = listLsbAccel[MPU6050_GetFullScaleAccelRange()] - (*aX);
+#endif /* ACCEL_INITIAL_CALIBRATION_X_AXIS */
+  
+#if (ACCEL_INITIAL_CALIBRATION_Y_AXIS == TRUE)
+  *aY = listLsbAccel[MPU6050_GetFullScaleAccelRange()] - (*aY);
+#endif /* ACCEL_INITIAL_CALIBRATION_Y_AXIS */
+  
+#if (ACCEL_INITIAL_CALIBRATION_Z_AXIS == TRUE)
+  *aZ = listLsbAccel[MPU6050_GetFullScaleAccelRange()] - (*aZ);
+#endif /* ACCEL_INITIAL_CALIBRATION_Z_AXIS */
 }
+
 
 /**
  * @}

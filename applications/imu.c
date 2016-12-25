@@ -29,7 +29,9 @@
 
 KalmanFilterType gyroPitchAxis;
 KalmanFilterType gyroRollAxis;
-double pitch, roll;
+
+static double accOffsetX, accOffsetY, accOffsetZ;
+static double gyroOffsetX, gyroOffsetY, gyroOffsetZ;
 
 static THD_WORKING_AREA(waProcessDataMpu6050, 128);
 static THD_FUNCTION(ProcessDataMpu6050, arg);
@@ -45,8 +47,16 @@ void Imu_Init(void)
   Kalman_Init(&gyroPitchAxis);
   Kalman_Init(&gyroRollAxis);
 
+  MPU6050_GetOffsetAxis(&accOffsetX, &accOffsetY, &accOffsetZ, &gyroOffsetX, &gyroOffsetY, &gyroOffsetZ);
+  main_printf("accOffsetX = %5.3f\r\n",accOffsetX);
+  main_printf("accOffsetY = %5.3f\r\n",accOffsetY);
+  main_printf("accOffsetZ = %5.3f\r\n",accOffsetZ);
+  main_printf("gyroOffsetX = %5.3f\r\n",gyroOffsetX);
+  main_printf("gyroOffsetY = %5.3f\r\n",gyroOffsetY);
+  main_printf("gyroOffsetZ = %5.3f\r\n",gyroOffsetZ);
+
   /* create a thread in ChibiOS to process data of mpu6050 */
-  chThdCreateStatic(waProcessDataMpu6050, sizeof(waProcessDataMpu6050), NORMALPRIO+1, ProcessDataMpu6050, NULL);
+  chThdCreateStatic(waProcessDataMpu6050, sizeof(waProcessDataMpu6050), NORMALPRIO+2, ProcessDataMpu6050, NULL);
 }
 
 
@@ -54,23 +64,30 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
 {
   chRegSetThreadName("IMU with mpu6050 sensor");
 
-  int16_t Accel_Gyro_Data[6];
-  double accX, accY, accZ;
-  double gyroX, gyroY, gyroZ;
-  uint32_t timer, temp_timer;
-  double gyroXangle, gyroYangle; // Angle calculate using the gyro only
-  double compAngleX, compAngleY; // Calculated angle using a complementary filter
-  double kalAngleX, kalAngleY; // Calculated angle using a Kalman filter
-  double dt;
-  double gyroXrate; // Convert to deg/s
-  double gyroYrate; // Convert to deg/s
+  static volatile int16_t Accel_Gyro_Data[6];
+  static volatile double accX, accY, accZ;
+  static volatile double gyroX, gyroY;
+  static volatile double pitch, roll;
+  static volatile systime_t timer, temp_timer;
+  static volatile double gyroXangle, gyroYangle; // Angle calculate using the gyro only
+  static volatile double compAngleX, compAngleY; // Calculated angle using a complementary filter
+  static volatile double kalAngleX, kalAngleY; // Calculated angle using a Kalman filter
+  static volatile double dt;
+  static volatile double gyroXrate; // Convert to deg/s
+  static volatile double gyroYrate; // Convert to deg/s
 
   MPU6050_GetRawAccelGyro(Accel_Gyro_Data);
-  accX = (double)Accel_Gyro_Data[0];
-  accY = (double)Accel_Gyro_Data[1];
-  accZ = (double)Accel_Gyro_Data[2];
-  gyroX = (double)Accel_Gyro_Data[3];
-  gyroY = (double)Accel_Gyro_Data[4];
+  accX = (double)Accel_Gyro_Data[0] - accOffsetX;
+  accY = (double)Accel_Gyro_Data[1] - accOffsetY;
+  accZ = (double)Accel_Gyro_Data[2] - accOffsetZ;
+  gyroX = (double)Accel_Gyro_Data[3] - gyroOffsetX;
+  gyroY = (double)Accel_Gyro_Data[4] - gyroOffsetY;
+
+  // accX = (double)Accel_Gyro_Data[0];
+  // accY = (double)Accel_Gyro_Data[1];
+  // accZ = (double)Accel_Gyro_Data[2];
+  // gyroX = (double)Accel_Gyro_Data[3];
+  // gyroY = (double)Accel_Gyro_Data[4];
 
   // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
   // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
@@ -88,18 +105,21 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
   gyroYangle = pitch;
   compAngleX = roll;
   compAngleY = pitch;
-  timer = (uint32_t)ST2S(chVTGetSystemTime());
+  timer = chVTGetSystemTime();
 
   for(;;) {
     MPU6050_GetRawAccelGyro(Accel_Gyro_Data);
-    temp_timer = (uint32_t)ST2S(chVTGetSystemTime());
-    dt = ((double)(temp_timer - timer))/1000000; // Calculate delta time
+    temp_timer = chVTGetSystemTime();
+    dt = ((double)(temp_timer - timer))/S2ST(1); // Calculate delta time
+    //dt = (double)(temp_timer - timer); // Calculate delta time
     timer = temp_timer;
-    accX = (double)Accel_Gyro_Data[0];
-    accY = (double)Accel_Gyro_Data[1];
-    accZ = (double)Accel_Gyro_Data[2];
-    gyroX = (double)Accel_Gyro_Data[3];
-    gyroY = (double)Accel_Gyro_Data[4];
+    // dt = (TIME_SLEEP_THREAD_IMU) / 1000;
+
+    accX = (double)Accel_Gyro_Data[0] - accOffsetX;
+    accY = (double)Accel_Gyro_Data[1] - accOffsetY;
+    accZ = (double)Accel_Gyro_Data[2] - accOffsetZ;
+    gyroX = (double)Accel_Gyro_Data[3] - gyroOffsetX;
+    gyroY = (double)Accel_Gyro_Data[4] - gyroOffsetY;
 
     // Source: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf eq. 25 and eq. 26
     // atan2 outputs the value of -π to π (radians) - see http://en.wikipedia.org/wiki/Atan2
@@ -156,12 +176,15 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
 #endif
 
     gyroXangle += gyroXrate * dt; // Calculate gyro angle without any filter
-    gyroYangle += gyroYrate * dt;
+    gyroYangle += gyroYrate * dt; // xem lai cho nay dang co van de
     //gyroXangle += kalmanX.getRate() * dt; // Calculate gyro angle using the unbiased rate
     //gyroYangle += kalmanY.getRate() * dt;
 
     compAngleX = 0.93 * (compAngleX + gyroXrate * dt) + 0.07 * roll; // Calculate the angle using a Complimentary filter
     compAngleY = 0.93 * (compAngleY + gyroYrate * dt) + 0.07 * pitch;
+
+    // compAngleX = 0.908 * (compAngleX + gyroXrate * dt) + 0.092 * roll; // Calculate the angle using a Complimentary filter
+    // compAngleY = 0.908 * (compAngleY + gyroYrate * dt) + 0.092 * pitch;
 
     // Reset the gyro angle when it has drifted too much
     if (gyroXangle < -180 || gyroXangle > 180)
@@ -170,10 +193,15 @@ static THD_FUNCTION(ProcessDataMpu6050, arg)
       gyroYangle = kalAngleY;
 
     main_printf("%5.3f\t%5.3f\t%5.3f\t%5.3f\t\t",roll, gyroXangle, compAngleX, kalAngleX);
-    main_printf("%5.3f\t%5.3f\t%5.3f\t%5.3f\t\r\n",pitch, gyroYangle, compAngleY, kalAngleY);
-    //main_printf("pitch=%5.3f\tgyroYangle=%5.3f\tcompAngleY=%5.3f\tkalAngleY=%5.3f\r\n",pitch, gyroYangle, compAngleY, kalAngleY);
+    // main_printf("%5.3f\t%5.3f\t%5.3f\t%5.3f\t\r\n",pitch, gyroYangle, compAngleY, kalAngleY);
+    main_printf("%5.3f\t%5.3f\t%5.3f\t%5.3f\t",pitch, gyroYangle, compAngleY, kalAngleY);
+    main_printf("%5.3f\t%5.3f\t\r\n",dt, timer);
+    // main_printf("pitch=%5.3f\tgyroYangle=%5.3f\tcompAngleY=%5.3f\tkalAngleY=%5.3f\r\n",pitch, gyroYangle, compAngleY, kalAngleY);
+    // temp = RAD_TO_DEG;
+    // main_printf("%5.3f\r\n",temp);
 
-    chThdSleepMilliseconds(500);
+    // chThdSleepMicroseconds(TIME_SLEEP_THREAD_IMU);
+    chThdSleepMilliseconds(100);
   }
 }
 

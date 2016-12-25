@@ -34,6 +34,8 @@ extern "C" {
 #define PI 3.1415926535897932384626433832795
 #define RAD_TO_DEG 57.295779513082320876798154814105
 
+#define TIME_SLEEP_THREAD_IMU	10	/* ms */
+
 #define RESTRICT_PITCH // Comment out to restrict roll to ±90deg instead - please read: http://www.freescale.com/files/sensors/doc/app_note/AN3461.pdf
 
 

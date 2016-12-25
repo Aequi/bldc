@@ -121,8 +121,19 @@ extern "C" {
 #define MPU6050_ACONFIG_AFS_SEL_8g		2
 #define MPU6050_ACONFIG_AFS_SEL_16g		3
 
+#define MPU6050_ACCEL_AFS_SEL_2g_LSB	16384
+#define MPU6050_ACCEL_AFS_SEL_4g_LSB	8192
+#define MPU6050_ACCEL_AFS_SEL_8g_LSB	4096
+#define MPU6050_ACCEL_AFS_SEL_16g_LSB	2048
+
 /* ACCEL_XOUT_H */
 #define MPU6050_ACCEL_XOUT_H_ADDR		0x3B
+
+/* ACCEL_YOUT_H */
+#define MPU6050_ACCEL_YOUT_H_ADDR		0x3D
+
+/* ACCEL_ZOUT_H */
+#define MPU6050_ACCEL_ZOUT_H_ADDR		0x3F
 
 /* TEMP_OUT_H */
 #define MPU6050_TEMP_OUT_H_ADDR			0x41
@@ -193,13 +204,7 @@ uint8_t MPU6050_GetSleepModeStatus(void);
 
 void MPU6050_GetRawAccelGyro(int16_t *AccelGyro);
 
-void MPU6050_GetGyroRoll(int16_t *GyroRoll);
-
-void MPU6050_GetGyroPitch(int16_t *GyroPitch);
-
-void MPU6050_GetGyroYaw(int16_t *GyroYaw);
-
-float MPU6050_GetOffsetPitch(void);
+void MPU6050_GetOffsetAxis(double *aX, double *aY, double *aZ, double *gX, double *gY, double *gZ);
 
 void MPU6050_DeInit(void);
 
