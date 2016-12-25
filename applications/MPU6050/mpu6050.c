@@ -282,7 +282,6 @@ void MPU6050_Init(void)
 
   /* Gyro full scale setting */
   MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x18);
-  // MPU6050_Write(MPU6050_GYRO_CONFIG_ADDR, 0x10);
    
   /* Accel full scale setting */
   MPU6050_Write(MPU6050_ACCEL_CONFIG_ADDR, 0x18);

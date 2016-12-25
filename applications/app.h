@@ -50,6 +50,6 @@ void app_nunchuk_update_output(chuck_data *data);
 
 // Custom apps
 void app_sten_init(void);
-void app_euc_init(void);
+void app_euc_start(void);
 
 #endif /* APP_H_ */

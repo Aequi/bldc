@@ -23,10 +23,12 @@ float[] kalmanX = new float[width];
 float[] kalmanY = new float[width];
 
 boolean drawValues  = false;
+PFont f;
 
 void setup() {
   //size(width, height);
   size(800, 600);
+  f = createFont("Arial",16,true); // STEP 2 Create Font
   println(Serial.list()); // Use this to print connected serial devices
   serial = new Serial(this, Serial.list()[1], 115200); // Set this to your serial port obtained using the line above
   serial.bufferUntil('\n'); // Buffer until line feed
@@ -66,6 +68,15 @@ void drawGraph() {
     line(0, height/4*i, width, height/4*i); // Draw line, indicating -90 deg, 0 deg and 90 deg
 
   convert();
+  fill(0, 255, 255);
+  text("AccY",10,20);
+  fill(255, 0, 255);
+  text("GyroY",10,35);
+  fill(124, 252, 0);
+  text("CompY",10,50);
+  fill(0, 0, 0);
+  text("KalmanY",10,65);
+  
   //drawAxisX();
   drawAxisY();
 }
